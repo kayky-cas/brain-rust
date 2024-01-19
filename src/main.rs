@@ -1,3 +1,4 @@
+#[derive(Debug, Clone, Copy)]
 enum Instruction {
     Increment(usize),
     Decrement(usize),
@@ -147,11 +148,60 @@ fn main() {
                 loop_stack.push(pos);
             }
             ']' => {
-                let pos = loop_stack.pop().unwrap();
+                let pos = loop_stack.pop().expect("Invalid loop");
                 instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
                 instructions.push(Instruction::EndLoop(pos));
             }
             _ => {}
         }
+    }
+
+    println!("{:?}", instructions);
+
+    let mut cells: Vec<u8> = vec![0; 3000];
+    let mut pointer = 0;
+    let mut instruction_pointer = 0;
+
+    loop {
+        if instruction_pointer >= instructions.len() {
+            break;
+        }
+
+        match instructions[instruction_pointer] {
+            Instruction::Increment(by) => {
+                cells[pointer] += by as u8;
+            }
+            Instruction::Decrement(by) => {
+                cells[pointer] -= by as u8;
+            }
+            Instruction::ShiftLeft(by) => {
+                if pointer < by {
+                    panic!("Invalid pointer");
+                }
+
+                pointer -= by;
+            }
+            Instruction::ShiftRight(by) => {
+                if pointer + by >= cells.len() {
+                    panic!("Invalid pointer");
+                }
+
+                pointer += by;
+            }
+            Instruction::Output => print!("{}", cells[pointer] as char),
+            Instruction::Input => todo!(),
+            Instruction::StartLoop(pos) => {
+                if cells[pointer] == 0 {
+                    instruction_pointer = pos.unwrap();
+                }
+            }
+            Instruction::EndLoop(pos) => {
+                if cells[pointer] != 0 {
+                    instruction_pointer = pos;
+                }
+            }
+        }
+
+        instruction_pointer += 1;
     }
 }
