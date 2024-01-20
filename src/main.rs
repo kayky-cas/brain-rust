@@ -42,33 +42,11 @@ impl Iterator for Lexer {
 }
 
 fn main() {
-    let buff = r"+++++ +++++ [         Inicia as células com os valores:
-  > +++++ +++         80
-  > +++++ +++++ +     110
-  > +++++ +++++       100
-  > ++++              40
-  > +++               30
-  > +++++ +++         80
-  > +++++ +++++ ++    120
-  > +++++ +++++ +     110
-  > +++++ +++++       100
-  > +++++ +++++ +     110
-  > +++               30
-  > +                 10
-  < <<<<< <<<<< < -
-]
-> - .                 Escreve 'O'
-> -- .                Escreve 'l'
-> ---.                Escreve 'a'
-> ++++ .              Escreve vírgula
-> ++ .                Escreve ' '
-> --- .               Escreve 'M'
-> --- .               Escreve 'u'
-> .                   Escreve 'n'
-> .                   Escreve 'd'
-> + .                 Escreve 'o'
-> +++ .               Escreve '!'
-> .                   Escreve nova linha";
+    let buff = r"++++++++++[>++++++++>+++++++++++>++
+++++++++>++++>+++>++++++++>++++++++
+++++>+++++++++++>++++++++++>+++++++
+++++>+++>+<<<<<<<<<<<<-]>-.>--.>---
+.>++++.>++.>---.>---.>.>.>+.>+++.>.";
 
     let mut instructions: Vec<Instruction> = Vec::new();
     let mut lexer = Lexer::new(buff.chars().rev().collect());
@@ -81,10 +59,8 @@ fn main() {
                 let mut count = 1;
 
                 loop {
-                    count += 1;
-
                     match lexer.next() {
-                        Some('+') => continue,
+                        Some('+') => count += 1,
                         Some(c) => {
                             lexer.push(c);
                             break;
@@ -98,9 +74,8 @@ fn main() {
             '-' => {
                 let mut count = 1;
                 loop {
-                    count += 1;
                     match lexer.next() {
-                        Some('-') => continue,
+                        Some('-') => count += 1,
                         Some(c) => {
                             lexer.push(c);
                             break;
@@ -113,9 +88,8 @@ fn main() {
             '>' => {
                 let mut count = 1;
                 loop {
-                    count += 1;
                     match lexer.next() {
-                        Some('>') => continue,
+                        Some('>') => count += 1,
                         Some(c) => {
                             lexer.push(c);
                             break;
@@ -128,9 +102,8 @@ fn main() {
             '<' => {
                 let mut count = 1;
                 loop {
-                    count += 1;
                     match lexer.next() {
-                        Some('<') => continue,
+                        Some('<') => count += 1,
                         Some(c) => {
                             lexer.push(c);
                             break;
@@ -149,6 +122,7 @@ fn main() {
             }
             ']' => {
                 let pos = loop_stack.pop().expect("Invalid loop");
+
                 instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
                 instructions.push(Instruction::EndLoop(pos));
             }
@@ -156,51 +130,48 @@ fn main() {
         }
     }
 
-    println!("{:?}", instructions);
-
-    let mut cells: Vec<u8> = vec![0; 3000];
+    let mut cells: Vec<u8> = vec![0];
     let mut pointer = 0;
     let mut instruction_pointer = 0;
 
-    loop {
-        if instruction_pointer >= instructions.len() {
-            break;
-        }
-
+    while instruction_pointer < instructions.len() {
         match instructions[instruction_pointer] {
             Instruction::Increment(by) => {
-                cells[pointer] += by as u8;
+                // TODO: Handle usize -> u8
+                cells[pointer] = cells[pointer].wrapping_add(by as u8);
             }
             Instruction::Decrement(by) => {
-                cells[pointer] -= by as u8;
+                // TODO: Handle usize -> u8
+                cells[pointer] = cells[pointer].wrapping_sub(by as u8);
             }
             Instruction::ShiftLeft(by) => {
                 if pointer < by {
-                    panic!("Invalid pointer");
+                    pointer = 0;
+                } else {
+                    pointer -= by;
                 }
-
-                pointer -= by;
             }
             Instruction::ShiftRight(by) => {
                 if pointer + by >= cells.len() {
-                    panic!("Invalid pointer");
+                    cells.resize(pointer + by + 1, 0);
                 }
 
                 pointer += by;
             }
             Instruction::Output => print!("{}", cells[pointer] as char),
             Instruction::Input => todo!(),
-            Instruction::StartLoop(pos) => {
-                if cells[pointer] == 0 {
-                    instruction_pointer = pos.unwrap();
+            Instruction::StartLoop(Some(end_loop_pos)) => {
+                if cells[pointer] == 0 && end_loop_pos < cells.len() - 1 {
+                    instruction_pointer = end_loop_pos + 1;
                 }
             }
-            Instruction::EndLoop(pos) => {
+            Instruction::EndLoop(start_loop_pos) => {
                 if cells[pointer] != 0 {
-                    instruction_pointer = pos;
+                    instruction_pointer = start_loop_pos;
                 }
             }
-        }
+            _ => {}
+        };
 
         instruction_pointer += 1;
     }
