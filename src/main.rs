@@ -1,4 +1,11 @@
-#[derive(Debug, Clone, Copy)]
+use std::{
+    env::{args, Args},
+    fs::File,
+    io::{stdin, stdout, Read, Write},
+    process::exit,
+};
+
+#[derive(Debug)]
 enum Instruction {
     Increment(usize),
     Decrement(usize),
@@ -10,30 +17,36 @@ enum Instruction {
     EndLoop(usize),
 }
 
-struct Lexer {
-    buffer: Vec<char>,
+struct Lexer<'a> {
+    buffer: &'a [u8],
+    cursor: usize,
 }
 
-impl Lexer {
-    fn new(buffer: Vec<char>) -> Self {
-        Lexer { buffer }
+impl<'a> Lexer<'a> {
+    fn new(buffer: &'a [u8]) -> Self {
+        Lexer { buffer, cursor: 0 }
     }
 
     fn next_char(&mut self) -> Option<char> {
-        loop {
-            let c = self.buffer.pop()?;
-            if matches!(c, '>' | '<' | '+' | '-' | '.' | ',' | '[' | ']') {
-                return Some(c);
+        while self.cursor < self.buffer.len() {
+            let c = self.buffer[self.cursor];
+
+            self.cursor += 1;
+
+            if matches!(c, b'>' | b'<' | b'+' | b'-' | b'.' | b',' | b'[' | b']') {
+                return Some(c as char);
             }
         }
+
+        None
     }
 
-    fn push(&mut self, c: char) {
-        self.buffer.push(c);
+    fn back(&mut self) {
+        self.cursor = self.cursor.saturating_sub(1);
     }
 }
 
-impl Iterator for Lexer {
+impl Iterator for Lexer<'_> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -41,138 +54,186 @@ impl Iterator for Lexer {
     }
 }
 
-fn main() {
-    let buff = r"++++++++++[>++++++++>+++++++++++>++
-++++++++>++++>+++>++++++++>++++++++
-++++>+++++++++++>++++++++++>+++++++
-++++>+++>+<<<<<<<<<<<<-]>-.>--.>---
-.>++++.>++.>---.>---.>.>.>+.>+++.>.";
+struct Parser;
 
-    let mut instructions: Vec<Instruction> = Vec::new();
-    let mut lexer = Lexer::new(buff.chars().rev().collect());
+impl Parser {
+    fn parse(mut lexer: Lexer) -> Vec<Instruction> {
+        let mut instructions: Vec<Instruction> = Vec::new();
+        let mut loop_stack: Vec<usize> = Vec::new();
 
-    let mut loop_stack: Vec<usize> = Vec::new();
+        while let Some(c) = lexer.next() {
+            match c {
+                '+' => {
+                    let mut count = 1;
 
-    while let Some(c) = lexer.next() {
-        match c {
-            '+' => {
-                let mut count = 1;
-
-                loop {
-                    match lexer.next() {
-                        Some('+') => count += 1,
-                        Some(c) => {
-                            lexer.push(c);
-                            break;
+                    loop {
+                        match lexer.next() {
+                            Some('+') => count += 1,
+                            Some(_) => {
+                                lexer.back();
+                                break;
+                            }
+                            None => break,
                         }
-                        None => break,
                     }
-                }
 
-                instructions.push(Instruction::Increment(count));
-            }
-            '-' => {
-                let mut count = 1;
-                loop {
-                    match lexer.next() {
-                        Some('-') => count += 1,
-                        Some(c) => {
-                            lexer.push(c);
-                            break;
-                        }
-                        None => break,
-                    }
+                    instructions.push(Instruction::Increment(count));
                 }
-                instructions.push(Instruction::Decrement(count));
-            }
-            '>' => {
-                let mut count = 1;
-                loop {
-                    match lexer.next() {
-                        Some('>') => count += 1,
-                        Some(c) => {
-                            lexer.push(c);
-                            break;
+                '-' => {
+                    let mut count = 1;
+                    loop {
+                        match lexer.next() {
+                            Some('-') => count += 1,
+                            Some(_) => {
+                                lexer.back();
+                                break;
+                            }
+                            None => break,
                         }
-                        None => break,
                     }
+                    instructions.push(Instruction::Decrement(count));
                 }
-                instructions.push(Instruction::ShiftRight(count));
-            }
-            '<' => {
-                let mut count = 1;
-                loop {
-                    match lexer.next() {
-                        Some('<') => count += 1,
-                        Some(c) => {
-                            lexer.push(c);
-                            break;
+                '>' => {
+                    let mut count = 1;
+                    loop {
+                        match lexer.next() {
+                            Some('>') => count += 1,
+                            Some(_) => {
+                                lexer.back();
+                                break;
+                            }
+                            None => break,
                         }
-                        None => break,
                     }
+                    instructions.push(Instruction::ShiftRight(count));
                 }
-                instructions.push(Instruction::ShiftLeft(count));
-            }
-            '.' => instructions.push(Instruction::Output),
-            ',' => instructions.push(Instruction::Input),
-            '[' => {
-                let pos = instructions.len();
-                instructions.push(Instruction::StartLoop(None));
-                loop_stack.push(pos);
-            }
-            ']' => {
-                let pos = loop_stack.pop().expect("Invalid loop");
+                '<' => {
+                    let mut count = 1;
+                    loop {
+                        match lexer.next() {
+                            Some('<') => count += 1,
+                            Some(_) => {
+                                lexer.back();
+                                break;
+                            }
+                            None => break,
+                        }
+                    }
+                    instructions.push(Instruction::ShiftLeft(count));
+                }
+                '.' => instructions.push(Instruction::Output),
+                ',' => instructions.push(Instruction::Input),
+                '[' => {
+                    let pos = instructions.len();
+                    instructions.push(Instruction::StartLoop(None));
+                    loop_stack.push(pos);
+                }
+                ']' => {
+                    let pos = loop_stack.pop().expect("Invalid loop");
 
-                instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
-                instructions.push(Instruction::EndLoop(pos));
+                    instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
+                    instructions.push(Instruction::EndLoop(pos));
+                }
+                _ => {}
             }
-            _ => {}
+        }
+
+        instructions
+    }
+}
+
+struct Program {
+    instructions: Vec<Instruction>,
+    cells: Vec<u8>,
+    pointer: usize,
+    instruction_pointer: usize,
+}
+
+impl Program {
+    fn new(instructions: Vec<Instruction>) -> Self {
+        Program {
+            instructions,
+            cells: vec![0],
+            pointer: 0,
+            instruction_pointer: 0,
         }
     }
 
-    let mut cells: Vec<u8> = vec![0];
-    let mut pointer = 0;
-    let mut instruction_pointer = 0;
+    fn run(&mut self, stdin: &mut impl Read, stdout: &mut impl Write) {
+        while self.instruction_pointer < self.instructions.len() {
+            match self.instructions[self.instruction_pointer] {
+                Instruction::Increment(by) => {
+                    self.cells[self.pointer] =
+                        ((self.cells[self.pointer] as usize + by) % 255) as u8;
+                }
+                Instruction::Decrement(by) => {
+                    self.cells[self.pointer] =
+                        ((self.cells[self.pointer] as usize - by) % 255) as u8;
+                }
+                Instruction::ShiftLeft(by) => {
+                    if self.pointer < by {
+                        self.pointer = 0;
+                    } else {
+                        self.pointer -= by;
+                    }
+                }
+                Instruction::ShiftRight(by) => {
+                    if self.pointer + by >= self.cells.len() {
+                        self.cells.resize(self.pointer + by + 1, 0);
+                    }
 
-    while instruction_pointer < instructions.len() {
-        match instructions[instruction_pointer] {
-            Instruction::Increment(by) => {
-                // TODO: Handle usize -> u8
-                cells[pointer] = cells[pointer].wrapping_add(by as u8);
-            }
-            Instruction::Decrement(by) => {
-                // TODO: Handle usize -> u8
-                cells[pointer] = cells[pointer].wrapping_sub(by as u8);
-            }
-            Instruction::ShiftLeft(by) => {
-                if pointer < by {
-                    pointer = 0;
-                } else {
-                    pointer -= by;
+                    self.pointer += by;
                 }
-            }
-            Instruction::ShiftRight(by) => {
-                if pointer + by >= cells.len() {
-                    cells.resize(pointer + by + 1, 0);
-                }
+                Instruction::Output => print!("{}", self.cells[self.pointer] as char),
+                Instruction::Input => {
+                    let mut buf = [0; 1];
 
-                pointer += by;
-            }
-            Instruction::Output => print!("{}", cells[pointer] as char),
-            Instruction::Input => todo!(),
-            Instruction::StartLoop(Some(end_loop_pos)) => {
-                if cells[pointer] == 0 && end_loop_pos < cells.len() - 1 {
-                    instruction_pointer = end_loop_pos + 1;
-                }
-            }
-            Instruction::EndLoop(start_loop_pos) => {
-                if cells[pointer] != 0 {
-                    instruction_pointer = start_loop_pos;
-                }
-            }
-            _ => {}
-        };
+                    stdin.read_exact(&mut buf).unwrap();
+                    stdout.flush().unwrap();
 
-        instruction_pointer += 1;
+                    self.cells[self.pointer] = buf[0];
+                }
+                Instruction::StartLoop(Some(end_loop_pos)) => {
+                    if self.cells[self.pointer] == 0 && end_loop_pos < self.cells.len() - 1 {
+                        self.instruction_pointer = end_loop_pos + 1;
+                    }
+                }
+                Instruction::EndLoop(start_loop_pos) => {
+                    if self.cells[self.pointer] != 0 {
+                        self.instruction_pointer = start_loop_pos;
+                    }
+                }
+                _ => {}
+            };
+
+            self.instruction_pointer += 1;
+        }
     }
+}
+
+fn interface(mut args: Args) -> Vec<u8> {
+    let program_name = args.next().unwrap();
+
+    if let Some(file_name) = args.next() {
+        let mut file = File::open(file_name).unwrap();
+        let mut buf = Vec::new();
+        file.read_to_end(&mut buf).unwrap();
+        buf
+    } else {
+        eprintln!("Usage: {} [filename]", program_name);
+        exit(1);
+    }
+}
+
+fn main() {
+    let buf = interface(args());
+
+    let lexer = Lexer::new(&buf);
+    let instructions = Parser::parse(lexer);
+    let mut program = Program::new(instructions);
+
+    let mut stdout = stdout();
+    let stdin = stdin();
+
+    program.run(&mut stdin.lock(), &mut stdout);
 }
