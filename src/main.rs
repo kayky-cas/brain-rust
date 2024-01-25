@@ -63,12 +63,11 @@ impl Parser {
 
         while let Some(c) = lexer.next() {
             match c {
-                '+' => {
+                c @ '<' | c @ '>' | c @ '+' | c @ '-' => {
                     let mut count = 1;
-
                     loop {
                         match lexer.next() {
-                            Some('+') => count += 1,
+                            Some(ch) if ch == c => count += 1,
                             Some(_) => {
                                 lexer.back();
                                 break;
@@ -77,49 +76,13 @@ impl Parser {
                         }
                     }
 
-                    instructions.push(Instruction::Increment(count));
-                }
-                '-' => {
-                    let mut count = 1;
-                    loop {
-                        match lexer.next() {
-                            Some('-') => count += 1,
-                            Some(_) => {
-                                lexer.back();
-                                break;
-                            }
-                            None => break,
-                        }
+                    match c {
+                        '>' => instructions.push(Instruction::ShiftRight(count)),
+                        '<' => instructions.push(Instruction::ShiftLeft(count)),
+                        '+' => instructions.push(Instruction::Increment(count)),
+                        '-' => instructions.push(Instruction::Decrement(count)),
+                        _ => {}
                     }
-                    instructions.push(Instruction::Decrement(count));
-                }
-                '>' => {
-                    let mut count = 1;
-                    loop {
-                        match lexer.next() {
-                            Some('>') => count += 1,
-                            Some(_) => {
-                                lexer.back();
-                                break;
-                            }
-                            None => break,
-                        }
-                    }
-                    instructions.push(Instruction::ShiftRight(count));
-                }
-                '<' => {
-                    let mut count = 1;
-                    loop {
-                        match lexer.next() {
-                            Some('<') => count += 1,
-                            Some(_) => {
-                                lexer.back();
-                                break;
-                            }
-                            None => break,
-                        }
-                    }
-                    instructions.push(Instruction::ShiftLeft(count));
                 }
                 '.' => instructions.push(Instruction::Output),
                 ',' => instructions.push(Instruction::Input),
