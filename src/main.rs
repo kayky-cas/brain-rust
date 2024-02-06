@@ -172,6 +172,9 @@ impl Program {
             self.instruction_pointer += 1;
         }
     }
+
+    fn interaction(&mut self) {
+    }
 }
 
 fn interface(mut args: Args) -> Vec<u8> {
