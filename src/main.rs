@@ -1,5 +1,5 @@
 use std::{
-    env::{args, Args},
+    env::args,
     fs::File,
     io::{stdin, stdout, Read, Write},
     process::exit,
@@ -173,33 +173,46 @@ impl Program {
         }
     }
 
-    fn interaction(&mut self) {
-    }
-}
+    fn interactive_run(&mut self) {
+        let mut stdout = stdout();
+        let stdin = stdin();
 
-fn interface(mut args: Args) -> Vec<u8> {
-    let program_name = args.next().unwrap();
-
-    if let Some(file_name) = args.next() {
-        let mut file = File::open(file_name).unwrap();
-        let mut buf = Vec::new();
-        file.read_to_end(&mut buf).unwrap();
-        buf
-    } else {
-        eprintln!("Usage: {} [filename]", program_name);
-        exit(1);
+        // Render loop
+        loop {
+            if self.instruction_pointer < self.instructions.len() {
+                self.run(&mut stdin.lock(), &mut stdout);
+            }
+        }
     }
 }
 
 fn main() {
-    let buf = interface(args());
+    let mut args = args();
 
-    let lexer = Lexer::new(&buf);
-    let instructions = Parser::parse(lexer);
-    let mut program = Program::new(instructions);
+    let program_name = args.next().unwrap();
 
-    let mut stdout = stdout();
-    let stdin = stdin();
+    match args.next().as_deref() {
+        Some("-i") => {
+            let mut program = Program::new(Vec::new());
+            program.interactive_run();
+        }
 
-    program.run(&mut stdin.lock(), &mut stdout);
+        Some(file_name) => {
+            let mut file = File::open(file_name).unwrap();
+            let mut buf = Vec::new();
+            file.read_to_end(&mut buf).unwrap();
+            let lexer = Lexer::new(&buf);
+            let instructions = Parser::parse(lexer);
+            let mut program = Program::new(instructions);
+
+            let mut stdout = stdout();
+            let stdin = stdin();
+
+            program.run(&mut stdin.lock(), &mut stdout);
+        }
+        _ => {
+            eprintln!("Usage: {} [filename]", program_name);
+            exit(1);
+        }
+    }
 }
