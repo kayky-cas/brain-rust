@@ -6,7 +6,9 @@ use std::{
 };
 
 use crossterm::{
-    cursor, execute, queue,
+    cursor,
+    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    execute, queue,
     style::{self, style, Stylize},
     terminal::{self, WindowSize},
 };
@@ -153,7 +155,9 @@ impl Program {
 
                     self.pointer += by;
                 }
-                Instruction::Output => print!("{}", self.cells[self.pointer] as char),
+                Instruction::Output => {
+                    let _ = write!(stdout, "{}", self.cells[self.pointer] as char);
+                }
                 Instruction::Input => {
                     let mut buf = [0; 1];
 
@@ -180,8 +184,54 @@ impl Program {
     }
 
     fn interactive_run(&mut self) -> io::Result<()> {
-        let mut stdout = stdout();
         let _stdin = stdin();
+        let mut output = Vec::new();
+
+        let mut line = String::new();
+
+        self.render(&output)?;
+
+        loop {
+            match event::read()? {
+                Event::Key(KeyEvent {
+                    code: KeyCode::Char(c),
+                    ..
+                }) => {
+                    line.push(c);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Backspace,
+                    ..
+                }) => {
+                    line.remove(line.len() - 1);
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Enter,
+                    ..
+                }) => {
+                    let mut parser = Parser::parse(Lexer::new(line.as_bytes()));
+
+                    self.instructions.append(&mut parser);
+                    self.run(&mut stdin().lock(), &mut output);
+
+                    line.clear();
+
+                    self.render(&output)?;
+                }
+                Event::Key(KeyEvent {
+                    code: KeyCode::Esc, ..
+                }) => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn render(&mut self, output: &[u8]) -> io::Result<()> {
+        let mut stdout = stdout();
 
         execute!(stdout, cursor::Hide)?;
 
@@ -204,13 +254,40 @@ impl Program {
         // Buffer box
 
         let mut buffer_text = String::new();
+        let mut buffer_idx_text = String::new();
+        let mut buffer_char_text = String::new();
 
         for (idx, &cell) in self.cells.iter().enumerate() {
-            buffer_text.push_str(&format!("{}", cell));
+            buffer_text.push_str(&format!("{:0>3}", cell));
+
+            if idx == self.pointer {
+                buffer_idx_text.push_str(" V ");
+            } else {
+                buffer_idx_text.push_str(&format!("{:0>3}", idx));
+            }
+
+            let cell = cell as char;
+
+            match cell {
+                '\n' => buffer_char_text.push_str(" \\n"),
+                '\t' => buffer_char_text.push_str(" \\t"),
+                '\r' => buffer_char_text.push_str(" \\r"),
+                '\0' => buffer_char_text.push_str(" \\0"),
+                _ => buffer_char_text.push_str(&format!("  {}", cell)),
+            }
+
             if idx < self.cells.len() - 1 {
                 buffer_text.push_str(" | ");
+                buffer_idx_text.push_str("   ");
+                buffer_char_text.push_str("   ");
             }
         }
+
+        queue!(
+            stdout,
+            cursor::MoveTo(5, 2),
+            style::PrintStyledContent(buffer_idx_text.white())
+        )?;
 
         term::write_box(
             &mut stdout,
@@ -218,6 +295,12 @@ impl Program {
             term::Vec2::new(3, 3),
             term::Vec2::new((buffer_text.len() + 4) as u16, 3),
             Some("Buffer"),
+        )?;
+
+        queue!(
+            stdout,
+            cursor::MoveTo(5, 6),
+            style::PrintStyledContent(buffer_char_text.white())
         )?;
 
         queue!(
@@ -238,6 +321,23 @@ impl Program {
             Some("Output"),
         )?;
 
+        let mut lines = String::new();
+
+        for (idx, x) in output.iter().enumerate() {
+            if idx as u16 % (output_size - 4) == 0 {
+                lines.push('\n');
+            }
+            lines.push(*x as char);
+        }
+
+        for (idx, line) in lines.lines().enumerate() {
+            queue!(
+                stdout,
+                cursor::MoveTo(columns - output_size - 1, 4 + idx as u16),
+                style::PrintStyledContent(line.white())
+            )?;
+        }
+
         // Input box
         term::write_box(
             &mut stdout,
@@ -256,8 +356,6 @@ impl Program {
         )?;
 
         stdout.flush()?;
-
-        loop {}
 
         Ok(())
     }
@@ -323,7 +421,7 @@ mod term {
     }
 }
 
-fn main() {
+fn main() -> io::Result<()> {
     let mut args = args();
 
     let program_name = args.next().unwrap();
@@ -331,7 +429,7 @@ fn main() {
     match args.next().as_deref() {
         Some("-i") => {
             let mut program = Program::new(Vec::new());
-            program.interactive_run();
+            program.interactive_run()?;
         }
 
         Some(file_name) => {
@@ -352,4 +450,6 @@ fn main() {
             exit(1);
         }
     }
+
+    Ok(())
 }
