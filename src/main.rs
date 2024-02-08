@@ -1,8 +1,14 @@
 use std::{
     env::args,
     fs::File,
-    io::{stdin, stdout, Read, Write},
+    io::{self, stdin, stdout, Read, Write},
     process::exit,
+};
+
+use crossterm::{
+    cursor, execute, queue,
+    style::{self, Stylize},
+    terminal::{self, WindowSize},
 };
 
 #[derive(Debug)]
@@ -116,7 +122,7 @@ impl Program {
     fn new(instructions: Vec<Instruction>) -> Self {
         Program {
             instructions,
-            cells: vec![0],
+            cells: vec![0; 5],
             pointer: 0,
             instruction_pointer: 0,
         }
@@ -173,16 +179,114 @@ impl Program {
         }
     }
 
-    fn interactive_run(&mut self) {
+    fn interactive_run(&mut self) -> io::Result<()> {
         let mut stdout = stdout();
-        let stdin = stdin();
+        let _stdin = stdin();
 
-        // Render loop
-        loop {
-            if self.instruction_pointer < self.instructions.len() {
-                self.run(&mut stdin.lock(), &mut stdout);
+        execute!(stdout, cursor::Hide)?;
+
+        let WindowSize { rows, columns, .. } = terminal::window_size()?;
+
+        execute!(stdout, terminal::Clear(terminal::ClearType::All))?;
+
+        let pos = term::Vec2::new(0, 0);
+        let size = term::Vec2::new(columns, rows);
+
+        // Borders
+        term::write_box(
+            &mut stdout,
+            style::Color::White,
+            pos,
+            size,
+            Some("Brain Rust"),
+        )?;
+
+        let inner_rows = rows - 2;
+        let inner_columns = columns - 2;
+
+        // Buffer box
+
+        let mut buffer_text = String::new();
+
+        for (idx, &cell) in self.cells.iter().enumerate() {
+            buffer_text.push_str(&format!("{}", cell));
+            if idx < self.cells.len() - 1 {
+                buffer_text.push_str(" | ");
             }
         }
+
+        term::write_box(
+            &mut stdout,
+            style::Color::Red,
+            term::Vec2::new(3, 3),
+            term::Vec2::new((buffer_text.len() + 4) as u16, 3),
+            Some("Buffer"),
+        )?;
+
+        queue!(
+            stdout,
+            cursor::MoveTo(5, 4),
+            style::PrintStyledContent(buffer_text.with(style::Color::Red))
+        )?;
+
+        stdout.flush()?;
+
+        loop {}
+
+        Ok(())
+    }
+}
+
+mod term {
+    use std::io;
+    use std::io::Stdout;
+
+    use crossterm::{
+        cursor, queue,
+        style::{self, Stylize},
+    };
+
+    pub struct Vec2 {
+        pub x: u16,
+        pub y: u16,
+    }
+
+    impl Vec2 {
+        pub fn new(x: u16, y: u16) -> Self {
+            Vec2 { x, y }
+        }
+    }
+
+    pub fn write_box(
+        stdout: &mut Stdout,
+        color: style::Color,
+        pos: Vec2,
+        size: Vec2,
+        title: Option<&str>,
+    ) -> io::Result<()> {
+        for y in 0..size.y {
+            for x in 0..size.x {
+                if (y == 0 || y == size.y - 1) || (x == 0 || x == size.x - 1) {
+                    queue!(
+                        stdout,
+                        cursor::MoveTo(pos.x + x, pos.y + y),
+                        style::PrintStyledContent("█".with(color))
+                    )?;
+                }
+            }
+        }
+
+        if let Some(title) = title {
+            let text_padding = (size.x as f32 * 0.05f32) as u16;
+
+            queue!(
+                stdout,
+                cursor::MoveTo(text_padding + pos.x, pos.y),
+                style::PrintStyledContent(title.with(color))
+            )?;
+        }
+
+        Ok(())
     }
 }
 
