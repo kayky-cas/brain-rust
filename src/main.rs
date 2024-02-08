@@ -7,9 +7,9 @@ use std::{
 
 use crossterm::{
     cursor,
-    event::{self, Event, KeyCode, KeyEvent, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEvent},
     execute, queue,
-    style::{self, style, Stylize},
+    style::{self, Stylize},
     terminal::{self, WindowSize},
 };
 
@@ -23,6 +23,7 @@ enum Instruction {
     Input,
     StartLoop(Option<usize>),
     EndLoop(usize),
+    Command(String),
 }
 
 struct Lexer<'a> {
@@ -35,18 +36,28 @@ impl<'a> Lexer<'a> {
         Lexer { buffer, cursor: 0 }
     }
 
-    fn next_char(&mut self) -> Option<char> {
+    fn next_token(&mut self) -> Option<char> {
         while self.cursor < self.buffer.len() {
             let c = self.buffer[self.cursor];
 
             self.cursor += 1;
 
-            if matches!(c, b'>' | b'<' | b'+' | b'-' | b'.' | b',' | b'[' | b']') {
+            if matches!(
+                c,
+                b'>' | b'<' | b'+' | b'-' | b'.' | b',' | b'[' | b']' | b'#'
+            ) {
                 return Some(c as char);
             }
         }
 
         None
+    }
+
+    fn next_char(&mut self) -> Option<char> {
+        self.buffer.get(self.cursor).map(|&c| {
+            self.cursor += 1;
+            c as char
+        })
     }
 
     fn back(&mut self) {
@@ -58,7 +69,7 @@ impl Iterator for Lexer<'_> {
     type Item = char;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.next_char()
+        self.next_token()
     }
 }
 
@@ -104,6 +115,67 @@ impl Parser {
 
                     instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
                     instructions.push(Instruction::EndLoop(pos));
+                }
+                _ => {}
+            }
+        }
+
+        instructions
+    }
+
+    fn parse_with_command(mut lexer: Lexer) -> Vec<Instruction> {
+        let mut instructions: Vec<Instruction> = Vec::new();
+        let mut loop_stack: Vec<usize> = Vec::new();
+
+        while let Some(c) = lexer.next() {
+            match c {
+                c @ '<' | c @ '>' | c @ '+' | c @ '-' => {
+                    let mut count = 1;
+                    loop {
+                        match lexer.next() {
+                            Some(ch) if ch == c => count += 1,
+                            Some(_) => {
+                                lexer.back();
+                                break;
+                            }
+                            None => break,
+                        }
+                    }
+
+                    match c {
+                        '>' => instructions.push(Instruction::ShiftRight(count)),
+                        '<' => instructions.push(Instruction::ShiftLeft(count)),
+                        '+' => instructions.push(Instruction::Increment(count)),
+                        '-' => instructions.push(Instruction::Decrement(count)),
+                        _ => {}
+                    }
+                }
+                '.' => instructions.push(Instruction::Output),
+                ',' => instructions.push(Instruction::Input),
+                '[' => {
+                    let pos = instructions.len();
+                    instructions.push(Instruction::StartLoop(None));
+                    loop_stack.push(pos);
+                }
+                ']' => {
+                    let pos = loop_stack.pop().expect("Invalid loop");
+
+                    instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
+                    instructions.push(Instruction::EndLoop(pos));
+                }
+                '#' => {
+                    let mut command = String::new();
+
+                    while let Some(c) = lexer.next_char() {
+                        if c == ';' {
+                            break;
+                        }
+                        command.push(c);
+                    }
+
+                    println!("Command: {}", command);
+
+                    instructions.push(Instruction::Command(command));
                 }
                 _ => {}
             }
@@ -176,6 +248,31 @@ impl Program {
                         self.instruction_pointer = start_loop_pos;
                     }
                 }
+                Instruction::Command(ref cmd) => {
+                    let mut cmd_spl = cmd.split_whitespace();
+
+                    let command = cmd_spl.next().unwrap().to_lowercase();
+                    let args: Vec<&str> = cmd_spl.collect();
+
+                    match command.as_str() {
+                        "include" => {
+                            let files: Vec<_> =
+                                args.iter().map(|x| File::open(x).unwrap()).collect();
+
+                            for mut file in files {
+                                let mut buf = Vec::new();
+                                let _ = file.read_to_end(&mut buf);
+
+                                let lexer = Lexer::new(&buf);
+
+                                let mut parser = Parser::parse(lexer);
+
+                                self.instructions.append(&mut parser);
+                            }
+                        }
+                        _ => todo!("{}: {}, {:?}", cmd, command, args),
+                    }
+                }
                 _ => {}
             };
 
@@ -209,7 +306,7 @@ impl Program {
                     code: KeyCode::Enter,
                     ..
                 }) => {
-                    let mut parser = Parser::parse(Lexer::new(line.as_bytes()));
+                    let mut parser = Parser::parse_with_command(Lexer::new(line.as_bytes()));
 
                     self.instructions.append(&mut parser);
                     self.run(&mut stdin().lock(), &mut output);
