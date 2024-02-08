@@ -7,7 +7,7 @@ use std::{
 
 use crossterm::{
     cursor, execute, queue,
-    style::{self, Stylize},
+    style::{self, style, Stylize},
     terminal::{self, WindowSize},
 };
 
@@ -201,9 +201,6 @@ impl Program {
             Some("Brain Rust"),
         )?;
 
-        let inner_rows = rows - 2;
-        let inner_columns = columns - 2;
-
         // Buffer box
 
         let mut buffer_text = String::new();
@@ -227,6 +224,35 @@ impl Program {
             stdout,
             cursor::MoveTo(5, 4),
             style::PrintStyledContent(buffer_text.with(style::Color::Red))
+        )?;
+
+        // Output box
+
+        let output_size = 50;
+
+        term::write_box(
+            &mut stdout,
+            style::Color::Green,
+            term::Vec2::new(columns - output_size - 3, 3),
+            term::Vec2::new(output_size, rows - 6),
+            Some("Output"),
+        )?;
+
+        // Input box
+        term::write_box(
+            &mut stdout,
+            style::Color::White,
+            term::Vec2::new(0, rows - 3),
+            term::Vec2::new(columns, 3),
+            Some("Input"),
+        )?;
+
+        queue!(
+            stdout,
+            cursor::MoveTo(2, rows - 2),
+            style::PrintStyledContent(">".white()),
+            cursor::MoveTo(4, rows - 2),
+            cursor::Show
         )?;
 
         stdout.flush()?;
@@ -266,11 +292,18 @@ mod term {
     ) -> io::Result<()> {
         for y in 0..size.y {
             for x in 0..size.x {
-                if (y == 0 || y == size.y - 1) || (x == 0 || x == size.x - 1) {
+                if x == 0 || x == size.x - 1 {
                     queue!(
                         stdout,
                         cursor::MoveTo(pos.x + x, pos.y + y),
-                        style::PrintStyledContent("█".with(color))
+                        style::PrintStyledContent("|".with(color))
+                    )?;
+                }
+                if y == 0 || y == size.y - 1 {
+                    queue!(
+                        stdout,
+                        cursor::MoveTo(pos.x + x, pos.y + y),
+                        style::PrintStyledContent("-".with(color))
                     )?;
                 }
             }
