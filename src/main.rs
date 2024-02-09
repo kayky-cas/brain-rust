@@ -75,8 +75,13 @@ impl Iterator for Lexer<'_> {
 
 struct Parser;
 
+enum ParserMode {
+    Normal,
+    Command,
+}
+
 impl Parser {
-    fn parse(mut lexer: Lexer) -> Vec<Instruction> {
+    fn parse(mut lexer: Lexer, mode: ParserMode) -> Vec<Instruction> {
         let mut instructions: Vec<Instruction> = Vec::new();
         let mut loop_stack: Vec<usize> = Vec::new();
 
@@ -116,54 +121,7 @@ impl Parser {
                     instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
                     instructions.push(Instruction::EndLoop(pos));
                 }
-                _ => {}
-            }
-        }
-
-        instructions
-    }
-
-    fn parse_with_command(mut lexer: Lexer) -> Vec<Instruction> {
-        let mut instructions: Vec<Instruction> = Vec::new();
-        let mut loop_stack: Vec<usize> = Vec::new();
-
-        while let Some(c) = lexer.next() {
-            match c {
-                c @ '<' | c @ '>' | c @ '+' | c @ '-' => {
-                    let mut count = 1;
-                    loop {
-                        match lexer.next() {
-                            Some(ch) if ch == c => count += 1,
-                            Some(_) => {
-                                lexer.back();
-                                break;
-                            }
-                            None => break,
-                        }
-                    }
-
-                    match c {
-                        '>' => instructions.push(Instruction::ShiftRight(count)),
-                        '<' => instructions.push(Instruction::ShiftLeft(count)),
-                        '+' => instructions.push(Instruction::Increment(count)),
-                        '-' => instructions.push(Instruction::Decrement(count)),
-                        _ => {}
-                    }
-                }
-                '.' => instructions.push(Instruction::Output),
-                ',' => instructions.push(Instruction::Input),
-                '[' => {
-                    let pos = instructions.len();
-                    instructions.push(Instruction::StartLoop(None));
-                    loop_stack.push(pos);
-                }
-                ']' => {
-                    let pos = loop_stack.pop().expect("Invalid loop");
-
-                    instructions[pos] = Instruction::StartLoop(Some(instructions.len()));
-                    instructions.push(Instruction::EndLoop(pos));
-                }
-                '#' => {
+                '#' if matches!(mode, ParserMode::Command) => {
                     let mut command = String::new();
 
                     while let Some(c) = lexer.next_char() {
@@ -265,7 +223,7 @@ impl Program {
 
                                 let lexer = Lexer::new(&buf);
 
-                                let mut parser = Parser::parse(lexer);
+                                let mut parser = Parser::parse(lexer, ParserMode::Normal);
 
                                 self.instructions.append(&mut parser);
                             }
@@ -306,13 +264,15 @@ impl Program {
                     code: KeyCode::Enter,
                     ..
                 }) => {
-                    let mut parser = Parser::parse_with_command(Lexer::new(line.as_bytes()));
+                    let mut parser =
+                        Parser::parse(Lexer::new(line.as_bytes()), ParserMode::Command);
 
                     self.instructions.append(&mut parser);
                     self.run(&mut stdin().lock(), &mut output);
 
                     line.clear();
 
+                    // Stdin
                     self.render(&output)?;
                 }
                 Event::Key(KeyEvent {
@@ -330,7 +290,7 @@ impl Program {
     fn render(&mut self, output: &[u8]) -> io::Result<()> {
         let mut stdout = stdout();
 
-        execute!(stdout, cursor::Hide)?;
+        execute!(stdout, cursor::Hide, terminal::DisableLineWrap)?;
 
         let WindowSize { rows, columns, .. } = terminal::window_size()?;
 
@@ -534,7 +494,7 @@ fn main() -> io::Result<()> {
             let mut buf = Vec::new();
             file.read_to_end(&mut buf).unwrap();
             let lexer = Lexer::new(&buf);
-            let instructions = Parser::parse(lexer);
+            let instructions = Parser::parse(lexer, ParserMode::Normal);
             let mut program = Program::new(instructions);
 
             let mut stdout = stdout();
