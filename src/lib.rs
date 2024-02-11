@@ -1,5 +1,5 @@
 mod instruction;
 pub mod interactive;
-pub mod parser;
+mod parser;
 pub mod program;
-pub mod term;
+mod term;

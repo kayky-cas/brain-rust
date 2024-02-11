@@ -1,15 +1,11 @@
 use std::{
     env::args,
     fs::File,
-    io::{self, stdin, stdout, Read},
+    io::{self, stdin, stdout},
     process::exit,
 };
 
-use brain_rust::{
-    interactive::Interactive,
-    parser::{Lexer, Parser, ParserMode},
-    program::Program,
-};
+use brain_rust::{interactive::Interactive, program::Program};
 
 fn main() -> io::Result<()> {
     let mut args = args();
@@ -25,12 +21,8 @@ fn main() -> io::Result<()> {
         }
 
         Some(file_name) => {
-            let mut file = File::open(file_name).unwrap();
-            let mut buf = Vec::new();
-            file.read_to_end(&mut buf).unwrap();
-            let lexer = Lexer::new(&buf);
-            let instructions = Parser::parse(lexer, ParserMode::Normal);
-            let mut program = Program::new(instructions);
+            let file = File::open(file_name).unwrap();
+            let mut program = Program::from(file);
 
             let mut stdout = stdout();
             let stdin = stdin();
@@ -38,7 +30,7 @@ fn main() -> io::Result<()> {
             program.run(&mut stdin.lock(), &mut stdout);
         }
         _ => {
-            eprintln!("Usage: {} [filename]", program_name);
+            eprintln!("Usage: {} [filename | -i]", program_name);
             exit(1);
         }
     }

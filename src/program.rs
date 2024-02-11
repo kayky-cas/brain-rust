@@ -78,18 +78,17 @@ impl Program {
 
                     match command.as_str() {
                         "include" => {
-                            let files: Vec<_> =
-                                args.iter().map(|x| File::open(x).unwrap()).collect();
+                            let files: Vec<_> = args.iter().map(File::open).collect();
 
-                            for mut file in files {
+                            for mut file in files.iter().flatten() {
                                 let mut buf = Vec::new();
                                 let _ = file.read_to_end(&mut buf);
 
                                 let lexer = Lexer::new(&buf);
 
-                                let mut parser = Parser::parse(lexer, ParserMode::Normal);
+                                let mut instructions = Parser::parse(lexer, ParserMode::Normal);
 
-                                self.instructions.append(&mut parser);
+                                self.instructions.append(&mut instructions);
                             }
                         }
                         _ => todo!("{}: {}, {:?}", cmd, command, args),
@@ -112,5 +111,15 @@ impl Program {
 
     pub fn pointer(&self) -> usize {
         self.pointer
+    }
+}
+
+impl From<File> for Program {
+    fn from(mut file: File) -> Self {
+        let mut buf = Vec::new();
+        let _ = file.read_to_end(&mut buf);
+        let lexer = Lexer::new(&buf);
+        let instructions = Parser::parse(lexer, ParserMode::Normal);
+        Program::new(instructions)
     }
 }
