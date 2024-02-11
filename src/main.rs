@@ -1,14 +1,11 @@
-use std::{
-    env::args,
-    io::{self},
-};
+use std::{env::args, io};
 
 use brain_rust::BrainRust;
 
 fn main() -> io::Result<()> {
     let mut args = args();
 
-    let program_name = args.next().unwrap();
+    let program_name = args.next().ok_or(io::ErrorKind::InvalidInput)?;
 
     match args.next().as_deref() {
         Some("-i") => BrainRust::interactive(),

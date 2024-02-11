@@ -7,7 +7,6 @@ mod term;
 use std::{
     fs::File,
     io::{self, stdin, stdout},
-    process::exit,
 };
 
 use crate::{interactive::Interactive, program::Program};
@@ -17,7 +16,7 @@ pub struct BrainRust;
 impl BrainRust {
     pub fn usage(program_name: String) -> io::Result<()> {
         eprintln!("Usage: {} [filename | -i]", program_name);
-        exit(1);
+        Err(io::Error::from(io::ErrorKind::InvalidInput))
     }
 
     pub fn interactive() -> io::Result<()> {
