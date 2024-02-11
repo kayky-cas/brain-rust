@@ -28,12 +28,12 @@ impl Program {
         while self.instruction_pointer < self.instructions.len() {
             match self.instructions[self.instruction_pointer] {
                 Instruction::Increment(by) => {
-                    self.cells[self.pointer] =
-                        ((self.cells[self.pointer] as usize + by) % 255) as u8;
+                    let wrapping = self.cells[self.pointer].wrapping_add((by % 255) as u8);
+                    self.cells[self.pointer] = wrapping;
                 }
                 Instruction::Decrement(by) => {
-                    self.cells[self.pointer] =
-                        ((self.cells[self.pointer] as usize - by) % 255) as u8;
+                    let wrapping = self.cells[self.pointer].wrapping_sub((by % 255) as u8);
+                    self.cells[self.pointer] = wrapping;
                 }
                 Instruction::ShiftLeft(by) => {
                     if self.pointer < by {

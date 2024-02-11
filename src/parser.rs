@@ -105,8 +105,6 @@ impl Parser {
                         command.push(c);
                     }
 
-                    println!("Command: {}", command);
-
                     instructions.push(Instruction::Command(command));
                 }
                 _ => {}
