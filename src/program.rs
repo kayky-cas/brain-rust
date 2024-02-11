@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{self, Read, Write},
 };
 
 use crate::parser::{Lexer, Parser, ParserMode};
@@ -24,7 +24,7 @@ impl Program {
         }
     }
 
-    pub fn run(&mut self, stdin: &mut impl Read, stdout: &mut impl Write) {
+    pub fn run(&mut self, stdin: &mut impl Read, stdout: &mut impl Write) -> io::Result<()> {
         while self.instruction_pointer < self.instructions.len() {
             match self.instructions[self.instruction_pointer] {
                 Instruction::Increment(by) => {
@@ -55,8 +55,8 @@ impl Program {
                 Instruction::Input => {
                     let mut buf = [0; 1];
 
-                    stdin.read_exact(&mut buf).unwrap();
-                    stdout.flush().unwrap();
+                    stdin.read_exact(&mut buf)?;
+                    stdout.flush()?;
 
                     self.cells[self.pointer] = buf[0];
                 }
@@ -99,6 +99,8 @@ impl Program {
 
             self.instruction_pointer += 1;
         }
+
+        Ok(())
     }
 
     pub fn append_instructions(&mut self, instructions: &mut Vec<Instruction>) {
