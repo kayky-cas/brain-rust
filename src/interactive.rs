@@ -1,7 +1,7 @@
 use crossterm::{
     cursor,
     event::{self, Event, KeyCode, KeyEvent},
-    execute, queue,
+    execute,
     style::{self, Stylize},
     terminal::{self, WindowSize},
 };
@@ -57,7 +57,7 @@ impl Interactive {
                         Parser::parse(Lexer::new(line.as_bytes()), ParserMode::Command);
 
                     self.program.append_instructions(&mut parser);
-                    self.program.run(&mut stdin().lock(), &mut self.output);
+                    self.program.run(&mut stdin().lock(), &mut self.output)?;
 
                     self.inputs.push(line.clone());
                     line.clear();
@@ -130,7 +130,7 @@ impl Interactive {
             }
         }
 
-        queue!(
+        execute!(
             stdout,
             cursor::MoveTo(5, 2),
             style::PrintStyledContent(buffer_idx_text.white())
@@ -144,13 +144,13 @@ impl Interactive {
             Some("Buffer"),
         )?;
 
-        queue!(
+        execute!(
             stdout,
             cursor::MoveTo(5, 6),
             style::PrintStyledContent(buffer_char_text.white())
         )?;
 
-        queue!(
+        execute!(
             stdout,
             cursor::MoveTo(5, 4),
             style::PrintStyledContent(buffer_text.with(style::Color::Red))
@@ -178,7 +178,7 @@ impl Interactive {
         }
 
         for (idx, line) in lines.lines().enumerate() {
-            queue!(
+            execute!(
                 stdout,
                 cursor::MoveTo(columns - output_size - 1, 4 + idx as u16),
                 style::PrintStyledContent(line.white())
@@ -194,7 +194,7 @@ impl Interactive {
             Some("Input"),
         )?;
 
-        queue!(
+        execute!(
             stdout,
             cursor::MoveTo(2, rows - 2),
             style::PrintStyledContent(">".white()),

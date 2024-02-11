@@ -1,37 +1,9 @@
 use std::{
     env::args,
-    fs::File,
-    io::{self, stdin, stdout},
-    process::exit,
+    io::{self},
 };
 
-use brain_rust::{interactive::Interactive, program::Program};
-
-struct BrainRust;
-
-impl BrainRust {
-    fn usage(program_name: String) -> io::Result<()> {
-        eprintln!("Usage: {} [filename | -i]", program_name);
-        exit(1);
-    }
-
-    fn interactive() -> io::Result<()> {
-        let program = Program::new(Vec::new());
-        let mut interactive = Interactive::new(program);
-
-        interactive.run()
-    }
-
-    fn run(file_name: &str) -> io::Result<()> {
-        let file = File::open(file_name).unwrap();
-        let mut program = Program::from(file);
-
-        let mut stdout = stdout();
-        let stdin = stdin();
-
-        program.run(&mut stdin.lock(), &mut stdout)
-    }
-}
+use brain_rust::BrainRust;
 
 fn main() -> io::Result<()> {
     let mut args = args();
