@@ -57,6 +57,7 @@ impl Interactive {
                         Parser::parse(Lexer::new(line.as_bytes()), ParserMode::Command);
 
                     self.program.append_instructions(&mut parser);
+
                     self.program.run(&mut stdin().lock(), &mut self.output)?;
 
                     self.inputs.push(line.clone());

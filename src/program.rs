@@ -91,6 +91,10 @@ impl Program {
                                 self.instructions.append(&mut instructions);
                             }
                         }
+                        "clear" => {
+                            self.cells.fill(0);
+                            stdout.write_all(b"\r")?;
+                        }
                         _ => todo!("{}: {}, {:?}", cmd, command, args),
                     }
                 }
